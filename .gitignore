@@ -1,0 +1,33 @@
+# Ignore data cache folders
+cache/echo-data/
+cache/echo-data-50k/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Logs and outputs
+*.log
+*.out
+
+# Environment files
+.env
+.venv
+*.env
+*.venv
+
+# VSCode settings
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Python packaging
+*.egg-info/
+dist/
+build/
