@@ -344,7 +344,7 @@ class LLM2Vec(nn.Module):
         sentences_sorted = [sentences[idx] for idx in length_sorted_idx]
         all_embeddings = []
 
-        batch_size = 2048
+        batch_size = 64
         if torch.cuda.device_count() <= 1:
             # This branch also support mps devices
             self.to(device)
