@@ -31,3 +31,8 @@ Thumbs.db
 *.egg-info/
 dist/
 build/
+
+# Ignore untracked files
+experiments/cascade_ndcg10_output/
+experiments/evaluate_ndcg.py
+hf_mteb_fresh_cache/

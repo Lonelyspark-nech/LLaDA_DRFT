@@ -73,7 +73,7 @@ if __name__ == "__main__":
     model = mteb.get_model("llada", **model_kwargs)
     #model = mteb.get_model("Mcpm-2B-loss1-tech", **model_kwargs)
 
-    evaluation.run(model, output_folder="/root/autodl-tmp/llm2vec-main/mteb_result/SmolLM2-135M-Instruct-loss3-tech",eval_splits=["test"])
+    evaluation.run(model, output_folder="/root/autodl-tmp/llm2vec-main/mteb_result/SmolLM2-135M-Instruct-loss4-tech",eval_splits=["test"])
 
 
 

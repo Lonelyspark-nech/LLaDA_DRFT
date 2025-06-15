@@ -1,3 +1,5 @@
+# 文件：run_supervised.py
+
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -43,7 +45,6 @@ logging.basicConfig(
 logger = get_logger(__name__, log_level="INFO")
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-
 
 # lora 设置
 def initialize_peft(
@@ -91,7 +92,6 @@ def initialize_peft(
     print(f"Model's Lora trainable parameters:")
     model.print_trainable_parameters()
     return model
-
 
 # 模型参数
 @dataclass
@@ -211,8 +211,17 @@ class CustomArguments:
         default=50.0, metadata={"help": "The loss scale for the loss function"}
     )
 
+    # 新增两行：
+    sub_dims: Optional[List[int]] = field(
+        default=None,
+        metadata={"help": "List of sub-dimensions for MRL, e.g. [64,256,1024,4096]"}
+    )
+    weights: Optional[List[float]] = field(
+        default=None,
+        metadata={"help": "Loss weights for each sub-dimension, e.g. [0.1,0.2,0.3,0.4]"}
+    )
 
-@dataclass
+
 class DefaultCollator:
     model: LLM2Vec
 
@@ -267,8 +276,6 @@ class LLM2VecSupervisedTrainer(Trainer):
         num_items_in_batch: int = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         features, labels = inputs
-        #print(features[0])
-        #print(features[1])
         q_reps = self.model.forward(features[0],is_q=True)
         d_reps = self.model.forward(features[1],is_q=False)
 
@@ -276,6 +283,7 @@ class LLM2VecSupervisedTrainer(Trainer):
         if len(features) > 2:
             d_reps_neg = self.model.forward(features[2],is_q=False)
 
+        # 传入 sub_dims 和 weights
         loss = self.loss_function(q_reps, d_reps, d_reps_neg)
 
         if return_outputs:
@@ -293,33 +301,25 @@ class LLM2VecSupervisedTrainer(Trainer):
         prediction_loss_only: bool,
         ignore_keys: Optional[list] = None,
     ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
-        """
-        重写 prediction_step，兼容 inputs 是 tuple (features, labels) 的情况
-        """
         model.eval()
         with torch.no_grad():
             if isinstance(inputs, (tuple, list)):
                 _, labels = inputs
-                # 调用 compute_loss 得到 loss 和模型输出
                 loss = self.compute_loss(model, inputs, return_outputs=False)
                 if prediction_loss_only:
-                    # return ...
                     return (loss, None, labels)
                 else:
                     return (loss, None, labels)
             else:
-                # fallback 到父类默认实现，处理 dict 类型 inputs
                 return super().prediction_step(model, inputs, prediction_loss_only, ignore_keys)
 
 
     def get_train_dataloader(self) -> DataLoader:
-        # Copying most of the code from the parent class, changing the sampler to SequentialSampler
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         train_dataset = self.train_dataset
         data_collator = self.data_collator
-
         data_collator = self._get_collator_with_removed_columns(
             data_collator, description="training"
         )
@@ -333,22 +333,19 @@ class LLM2VecSupervisedTrainer(Trainer):
         }
 
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
-            # Changing from random sampler to sequential sampler
             dataloader_params["sampler"] = SequentialSampler(train_dataset)
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["worker_init_fn"] = seed_worker
 
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
+
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
-        # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving model checkpoint to {output_dir}")
 
         self.model.save(output_dir)
-
-        # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
 
@@ -358,8 +355,6 @@ def main():
     )
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
-        # If we pass only one argument to the script and it's the path to a json file,
-        # let's parse it to get our arguments.
         model_args, data_args, training_args, custom_args = parser.parse_json_file(
             json_file=os.path.abspath(sys.argv[1])
         )
@@ -427,10 +422,10 @@ def main():
     )
 
     eval_dataset = load_dataset(
-    data_args.dataset_name,
-    split="validation",
-    file_path=data_args.dataset_file_path,
-    effective_batch_size=training_args.per_device_eval_batch_size * accelerator.num_processes,
+        data_args.dataset_name,
+        split="validation",
+        file_path=data_args.dataset_file_path,
+        effective_batch_size=training_args.per_device_eval_batch_size * accelerator.num_processes,
     )
 
 
@@ -470,13 +465,6 @@ def main():
         attn_implementation=model_args.attn_implementation,
     )
     
-    #for name, param in model.named_parameters():
-        #print(f"Parameter: {name}, dtype: {param.dtype}")
-    #print("model.config : ")
-    #print(model.config.__class__.__name__)
-
-    # model organization is LLM2VecModel.model -> HF Model, we have to apply PEFT to the inner model
-    
     model.model = initialize_peft(
         model.model,
         lora_r=custom_args.lora_r,
@@ -486,7 +474,13 @@ def main():
 
     tokenizer = model.tokenizer
 
-    train_loss = load_loss(custom_args.loss_class, scale=custom_args.loss_scale)
+    # 这里把 sub_dims 与 weights 传给 load_loss
+    train_loss = load_loss(
+        custom_args.loss_class,
+        scale=custom_args.loss_scale,
+        sub_dims=custom_args.sub_dims,
+        weights=custom_args.weights,
+    )
 
     data_collator = DefaultCollator(model)
 
@@ -494,7 +488,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_examples,
-        eval_dataset =eval_examples,
+        eval_dataset=eval_examples,
         data_collator=data_collator,
         tokenizer=tokenizer,
         loss_function=train_loss,

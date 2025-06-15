@@ -9,7 +9,7 @@
   "remove_unused_columns": false,
 
   "bidirectional": false,
-  "loss_class":"NORMAL",
+  "loss_class":"MRL",
   "pooling_mode": "eos_token",
 
   "do_train": true,

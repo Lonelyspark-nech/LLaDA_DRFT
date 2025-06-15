@@ -1,4 +1,4 @@
-from .HardNegativeNLLLoss import HardNegativeNLLLoss,DEBATERHardNegativeNLLLoss,MultiViewsHardNegativeNLLLoss
+from .HardNegativeNLLLoss import HardNegativeNLLLoss,DEBATERHardNegativeNLLLoss,MultiViewsHardNegativeNLLLoss,MRLHardNegativeNLLLoss
 
 
 def load_loss(loss_class, *args, **kwargs):
@@ -11,6 +11,8 @@ def load_loss(loss_class, *args, **kwargs):
         loss_cls = DEBATERHardNegativeNLLLoss
     elif loss_class == "MULTI-VIEW":
         loss_cls = MultiViewsHardNegativeNLLLoss
+    elif loss_class == "MRL":
+        loss_cls = MRLHardNegativeNLLLoss
     else:
         raise ValueError(f"Unknown loss class {loss_class}")
     return loss_cls(*args, **kwargs)
